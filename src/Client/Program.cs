@@ -29,6 +29,10 @@ class Program
             Console.WriteLine("Checking your credentials...");
 
             await Task.Delay(2000); // Simulate a delay
+            if (ws.State != WebSocketState.Open)
+            {
+                return;
+            }
 
             Console.WriteLine("Connected to WebSocket server. Type ':q!' to close the connection.");
 
@@ -40,9 +44,6 @@ class Program
                     break;
                 }
 
-                await Task.Delay(100);
-
-                Console.Write("Enter message: ");
                 message = Console.ReadLine() ?? string.Empty;
 
                 if (message?.ToLower() != ":q!")
