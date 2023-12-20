@@ -1,3 +1,4 @@
+using Shared.Enums;
 using Shared.Models;
 using System.Collections.Concurrent;
 using System.Net;
@@ -10,7 +11,7 @@ var app = builder.Build();
 
 app.UseWebSockets();
 
-var connectedClients = new ConcurrentDictionary<string, WebSocket>();
+var connectedClients = new ConcurrentDictionary<Client, WebSocket>();
 
 app.MapGet("/", async context =>
 {
@@ -21,45 +22,54 @@ app.MapGet("/", async context =>
         return;
     }
 
-    var name = context.Request.Query["nickname"].ToString();
+    var nickname = context.Request.Query["nickname"].ToString();
 
-    if (string.IsNullOrWhiteSpace(name))
+    if (string.IsNullOrWhiteSpace(nickname))
     {
         Console.WriteLine("Error: No nickname provided");
         context.Response.StatusCode = (int)HttpStatusCode.NotAcceptable;
         return;
     }
 
+    var room = context.Request.Query["room"].ToString();
+
+    if (string.IsNullOrWhiteSpace(room))
+    {
+        Console.WriteLine("Error: No room provided");
+        context.Response.StatusCode = (int)HttpStatusCode.NotAcceptable;
+        return;
+    }
+
     using var ws = await context.WebSockets.AcceptWebSocketAsync();
 
-    if (!connectedClients.TryAdd(name, ws))
+    if (!connectedClients.TryAdd(new() { Nickname = nickname, Room = room }, ws))
     {
-        Console.WriteLine($"Error: Nickname \"{name}\" already exists");
+        Console.WriteLine($"Error: Nickname \"{nickname}\" already exists");
 
         try
         {
             await ws.CloseAsync(
                 closeStatus: WebSocketCloseStatus.NormalClosure,
-                statusDescription: $"Error: Nickname \"{name}\" already exists",
+                statusDescription: $"Error: Nickname \"{nickname}\" already exists",
                 cancellationToken: CancellationToken.None
             );
         }
-        catch (WebSocketException wsex)
+        catch (WebSocketException wse)
         {
-            Console.WriteLine($"Log (WebSocket) -> While closing connection: {wsex.Message}");
+            Console.WriteLine($"Log (WebSocket) -> While closing connection: {wse.Message}");
         }
 
         return;
     }
 
-    Console.WriteLine($"*SERVER -> {name} connected");
+    Console.WriteLine($"*SERVER -> {nickname} connected to {room}");
 
-    await HandleWebSocketMessages(ws, name);
+    await HandleWebSocketMessages(ws, nickname, room);
 });
 
 app.Run();
 
-async Task HandleWebSocketMessages(WebSocket webSocket, string name)
+async Task HandleWebSocketMessages(WebSocket webSocket, string nickname, string room)
 {
     var buffer = new byte[1024 * 4];
 
@@ -75,24 +85,19 @@ async Task HandleWebSocketMessages(WebSocket webSocket, string name)
 
                 try
                 {
-                    var msgObj = JsonSerializer.Deserialize<Message>(buffStr)
-                        ?? throw new Exception($"{name} tried to send an invalid message format");
+                    var receivedMessage = JsonSerializer.Deserialize<Message>(buffStr)
+                        ?? throw new Exception($"{nickname} sent and invalid json message");
 
-                    Console.WriteLine($"[{msgObj.Room}] -> {name}: {msgObj.Content}");
+                    receivedMessage.From = nickname;
+                    receivedMessage.To = room;
+                    Console.WriteLine($"[{receivedMessage.To}] -> {receivedMessage.From}: {receivedMessage.Content}");
 
-                    var msgJson = JsonSerializer.Serialize(msgObj);
+                    var json = JsonSerializer.Serialize(receivedMessage);
 
-                    foreach (var client in connectedClients)
+                    foreach (var client in connectedClients.Where(c => c.Key.Room == room && c.Value.State == WebSocketState.Open))
                     {
-                        var connection = client.Value;
-
-                        if (connection.State != WebSocketState.Open)
-                        {
-                            continue;
-                        }
-
-                        await connection.SendAsync(
-                            buffer: new ArraySegment<byte>(Encoding.UTF8.GetBytes(msgJson)),
+                        await client.Value.SendAsync(
+                            buffer: new ArraySegment<byte>(Encoding.UTF8.GetBytes(json)),
                             messageType: result.MessageType,
                             endOfMessage: true,
                             cancellationToken: CancellationToken.None
@@ -106,25 +111,67 @@ async Task HandleWebSocketMessages(WebSocket webSocket, string name)
             }
             else if (result.MessageType == WebSocketMessageType.Close)
             {
-                connectedClients.TryRemove(name, out _);
+                var disconnectedClient = connectedClients.FirstOrDefault(x => x.Key.Nickname == nickname && x.Key.Room == room).Key;
+                connectedClients.TryRemove(disconnectedClient, out _);
+
+                string disconnectMessage = $"{nickname} disconnected from {room}";
+                var serverMessage = new Message
+                {
+                    Type = MessageType.Message,
+                    Content = disconnectMessage,
+                    From = "SERVER",
+                    To = room
+                };
+
+                foreach (var user in connectedClients.Where(c => c.Key.Room == room && c.Value.State == WebSocketState.Open))
+                {
+                    await user.Value.SendAsync(
+                        buffer: new ArraySegment<byte>(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(serverMessage))),
+                        messageType: WebSocketMessageType.Text,
+                        endOfMessage: true,
+                        cancellationToken: CancellationToken.None
+                    );
+                }
 
                 await webSocket.CloseAsync(
                     closeStatus: WebSocketCloseStatus.NormalClosure,
-                    statusDescription: null,
+                    statusDescription: $"*SERVER -> {disconnectMessage}",
                     cancellationToken: CancellationToken.None
                 );
 
-                Console.WriteLine($"*SERVER -> {name} disconnected");
+                Console.WriteLine($"*SERVER -> {disconnectMessage}");
                 break;
             }
         }
     }
-    catch (WebSocketException wsex)
+    catch (WebSocketException wse)
     {
-        Console.WriteLine($"Log (WebSocket) -> {wsex.Message}");
+        Console.WriteLine($"Log (WebSocket) -> {wse.Message}");
     }
     catch (Exception ex)
     {
         Console.WriteLine($"Log (Critical) -> {ex.Message}");
     }
 }
+
+// TODO: Broadcast messages
+//async Task Broadcast(string message, string room)
+//{
+//    var json = JsonSerializer.Serialize(new Message
+//    {
+//        Type = MessageType.Message,
+//        Content = message,
+//        From = "SERVER",
+//        To = room
+//    });
+
+//    foreach (var client in connectedClients.Where(c => c.Key.Room == room && c.Value.State == WebSocketState.Open))
+//    {
+//        await client.Value.SendAsync(
+//            buffer: new ArraySegment<byte>(Encoding.UTF8.GetBytes(json)),
+//            messageType: WebSocketMessageType.Text,
+//            endOfMessage: true,
+//            cancellationToken: CancellationToken.None
+//        );
+//    }
+//}

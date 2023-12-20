@@ -1,4 +1,5 @@
-﻿using Shared.Models;
+﻿using Shared.Enums;
+using Shared.Models;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -22,7 +23,10 @@ class Program
             Console.Write("Enter your nickname: ");
             var nickname = Console.ReadLine();
 
-            await ws.ConnectAsync(new Uri($"{baseUri}?nickname={nickname}"), CancellationToken.None);
+            Console.Write("Enter the room name: ");
+            var room = Console.ReadLine();
+
+            await ws.ConnectAsync(new Uri($"{baseUri}?nickname={nickname}&room={room}"), CancellationToken.None);
 
             _ = Task.Run(async () => await ReceiveMessages(ws));
 
@@ -69,9 +73,9 @@ class Program
     {
         var json = JsonSerializer.Serialize(new Message
         {
-            From = from ?? "Anonymous",
+            Type = MessageType.Message,
             Content = message ?? string.Empty,
-            Room = "general",
+
         });
 
         await ws.SendAsync(
@@ -92,7 +96,7 @@ class Program
 
             if (result.MessageType == WebSocketMessageType.Close)
             {
-                Console.WriteLine($"Error: {result.CloseStatusDescription}");
+                Console.WriteLine(result.CloseStatusDescription);
                 break;
             }
             else
@@ -104,7 +108,7 @@ class Program
                     var msgObj = JsonSerializer.Deserialize<Message>(receivedMessage)
                         ?? throw new Exception("Received an invalid message format");
 
-                    Console.WriteLine($"[{msgObj.Room}] -> {msgObj.From}: {msgObj.Content}");
+                    Console.WriteLine($"[{msgObj.To}] -> {msgObj.From}: {msgObj.Content}");
                 }
                 catch (Exception ex)
                 {
