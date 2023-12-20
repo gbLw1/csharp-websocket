@@ -6,7 +6,6 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 
-// Classe para lidar com WebSocket
 public class WebSocketHandler
 {
     private readonly ConcurrentDictionary<Client, WebSocket> _connectedClients;
@@ -51,22 +50,10 @@ public class WebSocketHandler
     private async Task HandleWebSocketMessages(Client client, WebSocket webSocket)
     {
         var buffer = new byte[1024 * 4];
-        var server = new Client { Nickname = "SERVER", Room = client.Room };
 
         try
         {
-            string joinMessage = $"{client.Nickname} entrou na sala {client.Room}";
-            var serverMsg = new Message
-            {
-                Type = MessageType.Message,
-                Content = joinMessage,
-                From = server,
-                To = client.Room
-            };
-
-            Console.WriteLine($"{FormatDateTime(serverMsg.SentAt)} || *SERVER -> {serverMsg.Content}");
-
-            BroadcastMessage(serverMsg);
+            HandleClientConnect(client);
 
             while (webSocket.State == WebSocketState.Open)
             {
@@ -100,8 +87,6 @@ public class WebSocketHandler
         {
             SendMessage(connectedClient.Value, message);
         }
-
-        //Console.WriteLine($"{FormatDateTime(message.SentAt)} || *SERVER -> {message.Content}");
     }
 
     private void ProcessTextMessage(string messageStr, Client client)
@@ -122,6 +107,23 @@ public class WebSocketHandler
         {
             Console.WriteLine($"Error: {ex.Message}");
         }
+    }
+
+    private void HandleClientConnect(Client client)
+    {
+        string joinMessage = $"{client.Nickname} entrou na sala {client.Room}";
+        var serverMsg = new Message
+        {
+            Type = MessageType.Message,
+            Content = joinMessage,
+            From = new Client { Nickname = "SERVER", Room = client.Room },
+            To = client.Room
+        };
+
+        Console.WriteLine($"{FormatDateTime(serverMsg.SentAt)} || *SERVER -> {serverMsg.Content}");
+
+        BroadcastMessage(serverMsg);
+
     }
 
     private void HandleClientDisconnect(Client client)
