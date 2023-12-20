@@ -40,4 +40,11 @@ public class Message
     /// </summary>
     [JsonPropertyName("isTyping")]
     public bool? IsTyping { get; set; }
+
+    /// <summary>
+    /// <para>Automagically set by the server (ignored if client sets it).</para>
+    /// <para>When the message was sent.</para>
+    /// </summary>
+    [JsonPropertyName("sentAt")]
+    public DateTime SentAt { get; set; } = DateTime.Now;
 }

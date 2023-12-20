@@ -52,7 +52,7 @@ app.MapGet("/", async context =>
     var client = new Client { Nickname = nickname, Room = room };
     connectedClients.TryAdd(client, ws);
 
-    Console.WriteLine($"*SERVER -> {nickname} connected to {room}");
+    //Console.WriteLine($"*SERVER -> {nickname} connected to {room}");
 
     await HandleWebSocketMessages(client, ws);
 });
@@ -76,6 +76,28 @@ async Task HandleWebSocketMessages(Client client, WebSocket webSocket)
 
     try
     {
+        string joinMessage = $"{client.Nickname} joined {client.Room}";
+        var serverMsg = new Message
+        {
+            Type = MessageType.Message,
+            Content = joinMessage,
+            From = server,
+            To = client.Room
+        };
+
+        foreach (var connectedClient in connectedClients.Where(
+                       c => c.Key.Room == client.Room && c.Value.State == WebSocketState.Open))
+        {
+            await connectedClient.Value.SendAsync(
+                buffer: new ArraySegment<byte>(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(serverMsg))),
+                messageType: WebSocketMessageType.Text,
+                endOfMessage: true,
+                cancellationToken: CancellationToken.None
+            );
+        }
+
+        Console.WriteLine($"{FormatDateTime(serverMsg.SentAt)} || *SERVER -> {joinMessage}");
+
         while (webSocket.State == WebSocketState.Open)
         {
             var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
@@ -92,7 +114,7 @@ async Task HandleWebSocketMessages(Client client, WebSocket webSocket)
                     receivedMessage.From = client;
                     receivedMessage.To = client.Room;
 
-                    Console.WriteLine($"[{receivedMessage.To}] -> {receivedMessage.From.Nickname}: {receivedMessage.Content}");
+                    Console.WriteLine($"{FormatDateTime(receivedMessage.SentAt)} || [{receivedMessage.To}] -> {receivedMessage.From.Nickname}: {receivedMessage.Content}");
 
                     var json = JsonSerializer.Serialize(receivedMessage);
 
@@ -142,7 +164,7 @@ async Task HandleWebSocketMessages(Client client, WebSocket webSocket)
                     cancellationToken: CancellationToken.None
                 );
 
-                Console.WriteLine($"*SERVER -> {disconnectMessage}");
+                Console.WriteLine($"{FormatDateTime(serverMessage.SentAt)} || *SERVER -> {disconnectMessage}");
                 break;
             }
         }
@@ -156,3 +178,5 @@ async Task HandleWebSocketMessages(Client client, WebSocket webSocket)
         Console.WriteLine($"Log (Critical) {nameof(HandleWebSocketMessages)} -> {ex.Message}");
     }
 }
+
+string FormatDateTime(DateTime dateTime) => dateTime.ToString("dd/MM/yyyy - HH:mm:ss");
