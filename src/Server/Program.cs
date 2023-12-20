@@ -11,20 +11,30 @@ app.MapGet("/", async context =>
 {
     if (!context.WebSockets.IsWebSocketRequest)
     {
+        Console.WriteLine("No WebSocket request");
         context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+        return;
+    }
+
+    var name = context.Request.Query["nickname"].ToString();
+
+    if (string.IsNullOrWhiteSpace(name))
+    {
+        Console.WriteLine("No nickname provided");
+        context.Response.StatusCode = (int)HttpStatusCode.NotAcceptable;
         return;
     }
 
     using var ws = await context.WebSockets.AcceptWebSocketAsync();
 
-    Console.WriteLine("WebSocket connection established");
+    Console.WriteLine($"SERVER -> {name} connected");
 
-    await HandleWebSocketMessages(ws);
+    await HandleWebSocketMessages(ws, name);
 });
 
 app.Run();
 
-static async Task HandleWebSocketMessages(WebSocket webSocket)
+static async Task HandleWebSocketMessages(WebSocket webSocket, string name)
 {
     var buffer = new byte[1024 * 4];
 
@@ -35,7 +45,7 @@ static async Task HandleWebSocketMessages(WebSocket webSocket)
         if (result.MessageType == WebSocketMessageType.Text)
         {
             var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-            Console.WriteLine($"Received message from client: {message}");
+            Console.WriteLine($"{name}: {message}");
 
             await webSocket.SendAsync(
                 buffer: new ArraySegment<byte>(buffer, 0, result.Count),
@@ -51,7 +61,7 @@ static async Task HandleWebSocketMessages(WebSocket webSocket)
                 cancellationToken: CancellationToken.None
             );
 
-            Console.WriteLine("WebSocket connection closed");
+            Console.WriteLine($"SERVER -> {name} disconnected");
             break;
         }
     }
