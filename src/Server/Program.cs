@@ -36,11 +36,18 @@ app.MapGet("/", async context =>
     {
         Console.WriteLine($"Error: Nickname \"{name}\" already exists");
 
-        await ws.CloseAsync(
-            closeStatus: WebSocketCloseStatus.NormalClosure,
-            statusDescription: "Nickname already exists",
-            cancellationToken: CancellationToken.None
-        );
+        try
+        {
+            await ws.CloseAsync(
+                closeStatus: WebSocketCloseStatus.NormalClosure,
+                statusDescription: $"Error: Nickname \"{name}\" already exists",
+                cancellationToken: CancellationToken.None
+            );
+        }
+        catch (WebSocketException wsex)
+        {
+            Console.WriteLine($"Log (WebSocket) -> While closing connection: {wsex.Message}");
+        }
 
         return;
     }
@@ -56,60 +63,68 @@ async Task HandleWebSocketMessages(WebSocket webSocket, string name)
 {
     var buffer = new byte[1024 * 4];
 
-    while (webSocket.State == WebSocketState.Open)
+    try
     {
-        var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-
-        if (result.MessageType == WebSocketMessageType.Text)
+        while (webSocket.State == WebSocketState.Open)
         {
-            var buffStr = Encoding.UTF8.GetString(buffer, 0, result.Count);
+            var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
 
-            try
+            if (result.MessageType == WebSocketMessageType.Text)
             {
-                // parse the message to a Message object
-                var msgObj = JsonSerializer.Deserialize<Message>(buffStr)
-                    ?? throw new Exception($"{name} tried to send an invalid message format");
+                var buffStr = Encoding.UTF8.GetString(buffer, 0, result.Count);
 
-                // Console.WriteLine($"{name}: {message}");
-                Console.WriteLine($"[{msgObj.Room}] -> {name}: {msgObj.Content}");
-
-                var msgJson = JsonSerializer.Serialize(msgObj);
-
-                foreach (var client in connectedClients)
+                try
                 {
-                    var connection = client.Value;
+                    var msgObj = JsonSerializer.Deserialize<Message>(buffStr)
+                        ?? throw new Exception($"{name} tried to send an invalid message format");
 
-                    if (connection.State != WebSocketState.Open)
+                    Console.WriteLine($"[{msgObj.Room}] -> {name}: {msgObj.Content}");
+
+                    var msgJson = JsonSerializer.Serialize(msgObj);
+
+                    foreach (var client in connectedClients)
                     {
-                        continue;
-                    }
+                        var connection = client.Value;
 
-                    await connection.SendAsync(
-                        //buffer: new ArraySegment<byte>(buffer, 0, result.Count),
-                        buffer: new ArraySegment<byte>(Encoding.UTF8.GetBytes(msgJson)),
-                        messageType: result.MessageType,
-                        endOfMessage: true,
-                        cancellationToken: CancellationToken.None
-                    );
+                        if (connection.State != WebSocketState.Open)
+                        {
+                            continue;
+                        }
+
+                        await connection.SendAsync(
+                            buffer: new ArraySegment<byte>(Encoding.UTF8.GetBytes(msgJson)),
+                            messageType: result.MessageType,
+                            endOfMessage: true,
+                            cancellationToken: CancellationToken.None
+                        );
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error: {ex.Message}");
                 }
             }
-            catch (Exception ex)
+            else if (result.MessageType == WebSocketMessageType.Close)
             {
-                Console.WriteLine($"Error: {ex.Message}");
+                connectedClients.TryRemove(name, out _);
+
+                await webSocket.CloseAsync(
+                    closeStatus: WebSocketCloseStatus.NormalClosure,
+                    statusDescription: null,
+                    cancellationToken: CancellationToken.None
+                );
+
+                Console.WriteLine($"*SERVER -> {name} disconnected");
+                break;
             }
         }
-        else if (result.MessageType == WebSocketMessageType.Close)
-        {
-            connectedClients.TryRemove(name, out _);
-
-            await webSocket.CloseAsync(
-                closeStatus: WebSocketCloseStatus.NormalClosure,
-                statusDescription: null,
-                cancellationToken: CancellationToken.None
-            );
-
-            Console.WriteLine($"*SERVER -> {name} disconnected");
-            break;
-        }
+    }
+    catch (WebSocketException wsex)
+    {
+        Console.WriteLine($"Log (WebSocket) -> {wsex.Message}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Log (Critical) -> {ex.Message}");
     }
 }
