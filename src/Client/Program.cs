@@ -108,7 +108,7 @@ class Program
                     var msgObj = JsonSerializer.Deserialize<Message>(receivedMessage)
                         ?? throw new Exception("Received an invalid message format");
 
-                    Console.WriteLine($"[{msgObj.To}] -> {msgObj.From}: {msgObj.Content}");
+                    Console.WriteLine($"[{msgObj.To}] -> {msgObj.From?.Nickname}: {msgObj.Content}");
                 }
                 catch (Exception ex)
                 {

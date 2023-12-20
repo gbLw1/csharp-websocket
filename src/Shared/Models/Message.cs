@@ -25,7 +25,7 @@ public class Message
     /// <para>The nickname of the sender.</para>
     /// </summary>
     [JsonPropertyName("from")]
-    public string? From { get; set; }
+    public Client? From { get; set; }
 
     /// <summary>
     /// <para>Automagically set by the server (ignored if client sets it).</para>

@@ -9,7 +9,7 @@ public class Client
     /// <para>The unique identifier of the client.</para>
     /// </summary>
     [JsonPropertyName("id")]
-    public static Guid Id => Guid.NewGuid();
+    public Guid Id => Guid.NewGuid();
 
     /// <summary>
     /// <para>Required</para>

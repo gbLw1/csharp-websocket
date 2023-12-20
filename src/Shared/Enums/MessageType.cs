@@ -7,4 +7,5 @@ public enum MessageType
 {
     Message,
     Notification,
+    // TODO: ServerMessage,
 }
