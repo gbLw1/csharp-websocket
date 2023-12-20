@@ -29,5 +29,5 @@ the client will connect to `ws://localhost:5100` by default, you can change it a
 ## TODO
 
 - Make the server multi-threaded
-- Change the 'From' field in the message to be the Client's full object
+- Change the 'From' field in the message to the client's ID instead of the client's nickname
 
