@@ -53,12 +53,14 @@ class Program
                 if (message?.ToLower() != ":q!")
                 {
                     await SendMessage(ws, nickname, message);
+                } else {
+                    await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client closed", CancellationToken.None);
                 }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error: {ex.Message}");
+            Console.WriteLine(ex.Message);
         }
         finally
         {
@@ -66,6 +68,8 @@ class Program
             {
                 await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client closed", CancellationToken.None);
             }
+
+            ws.Dispose();
         }
     }
 
