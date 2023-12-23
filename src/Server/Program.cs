@@ -80,21 +80,12 @@ public class WebSocketHandler
         }
     }
 
-    private void BroadcastMessage(Message message)
-    {
-        foreach (var connectedClient in _connectedClients
-            .Where(c => c.Key.Room == message.To && c.Value.State == WebSocketState.Open))
-        {
-            SendMessage(connectedClient.Value, message);
-        }
-    }
-
     private void ProcessTextMessage(string messageStr, Client client)
     {
         try
         {
             var receivedMessage = JsonSerializer.Deserialize<Message>(messageStr)
-                ?? throw new Exception($"{client.Nickname} enviou uma mensagem JSON inválida");
+                ?? throw new Exception($"{client.Nickname} enviou um formato JSON invÃ¡lido");
 
             receivedMessage.From = client;
             receivedMessage.To = client.Room;
@@ -107,6 +98,25 @@ public class WebSocketHandler
         {
             Console.WriteLine($"Error: {ex.Message}");
         }
+    }
+
+    private void BroadcastMessage(Message message)
+    {
+        foreach (var connectedClient in _connectedClients
+            .Where(c => c.Key.Room == message.To && c.Value.State == WebSocketState.Open))
+        {
+            SendMessage(connectedClient.Value, message);
+        }
+    }
+
+    private void SendMessage(WebSocket webSocket, Message message)
+    {
+        var json = JsonSerializer.Serialize(message);
+        webSocket.SendAsync(
+            buffer: new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes(json)),
+            messageType: WebSocketMessageType.Text,
+            endOfMessage: true,
+            cancellationToken: CancellationToken.None);
     }
 
     private void HandleClientConnect(Client client)
@@ -123,7 +133,6 @@ public class WebSocketHandler
         Console.WriteLine($"{FormatDateTime(serverMsg.SentAt)} || *SERVER -> {serverMsg.Content}");
 
         BroadcastMessage(serverMsg);
-
     }
 
     private void HandleClientDisconnect(Client client)
@@ -142,15 +151,6 @@ public class WebSocketHandler
         Console.WriteLine($"{FormatDateTime(serverMessage.SentAt)} || *SERVER -> {serverMessage.Content}");
 
         BroadcastMessage(serverMessage);
-    }
-
-    private void SendMessage(WebSocket webSocket, Message message)
-    {
-        var json = JsonSerializer.Serialize(message);
-        webSocket.SendAsync(new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes(json)),
-                            WebSocketMessageType.Text,
-                            true,
-                            CancellationToken.None);
     }
 
     private string FormatDateTime(DateTime dateTime) => dateTime.ToString("dd/MM/yyyy - HH:mm:ss");
