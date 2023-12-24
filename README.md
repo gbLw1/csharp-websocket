@@ -28,6 +28,5 @@ the client will connect to `ws://localhost:5100` by default, you can change it a
 
 ## TODO
 
-- Make the server multi-threaded
 - Refactor using channels
 
