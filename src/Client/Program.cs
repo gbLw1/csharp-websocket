@@ -52,7 +52,7 @@ class Program
 
                 if (message?.ToLower() != ":q!")
                 {
-                    await SendMessage(ws, nickname, message);
+                    await SendMessage(ws, message);
                 } else {
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client closed", CancellationToken.None);
                 }
@@ -73,14 +73,9 @@ class Program
         }
     }
 
-    static async Task SendMessage(ClientWebSocket ws, string? from, string? message)
+    static async Task SendMessage(ClientWebSocket ws, string? message)
     {
-        var json = JsonSerializer.Serialize(new Message
-        {
-            Type = MessageType.Message,
-            Content = message ?? string.Empty,
-
-        });
+        var json = JsonSerializer.Serialize(message);
 
         await ws.SendAsync(
             buffer: new ArraySegment<byte>(Encoding.UTF8.GetBytes(json)),
