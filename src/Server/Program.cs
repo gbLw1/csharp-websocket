@@ -84,15 +84,20 @@ public class WebSocketHandler
     {
         try
         {
-            var receivedMessage = JsonSerializer.Deserialize<Message>(messageStr)
+            var receivedMessage = JsonSerializer.Deserialize<string>(messageStr)
                 ?? throw new Exception($"{client.Nickname} enviou um formato JSON inválido");
 
-            receivedMessage.From = client;
-            receivedMessage.To = client.Room;
+            var msg = new Message
+            {
+                Type = MessageType.Message,
+                Content = receivedMessage,
+                From = client,
+                To = client.Room
+            };
 
-            Console.WriteLine($"{FormatDateTime(receivedMessage.SentAt)} || [{receivedMessage.To}] -> {receivedMessage.From.Nickname}: {receivedMessage.Content}");
+            Console.WriteLine($"{FormatDateTime(msg.SentAt)} || [{msg.To}] -> {msg.From.Nickname}: {msg.Content}");
 
-            BroadcastMessage(receivedMessage);
+            BroadcastMessage(msg);
         }
         catch (Exception ex)
         {
